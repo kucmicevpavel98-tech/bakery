@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- PWA для iOS: запуск с экрана «Домой» без адресной строки -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Пекарня">
+<meta name="theme-color" content="#1c1917">
+<title>Пульс пекарни</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<style>
+  /* ===== Цветовые токены (светлая/тёмная тема) ===== */
+  :root{
+    --bg:#f5f3f0; --card:#ffffff; --text:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#b45309; --accent-soft:#fef3c7;
+    --green:#15803d; --green-soft:#dcfce7;
+    --yellow:#a16207; --yellow-soft:#fef9c3;
+    --red:#b91c1c; --red-soft:#fee2e2;
+    --blue:#1d4ed8; --blue-soft:#dbeafe;
+    --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c0a09; --card:#1c1917; --text:#f5f5f4; --muted:#a8a29e; --line:#292524;
+      --accent:#f59e0b; --accent-soft:#3b2a0a;
+      --green:#4ade80; --green-soft:#0f2e1a;
+      --yellow:#facc15; --yellow-soft:#2e2a0a;
+      --red:#f87171; --red-soft:#3a1212;
+      --blue:#60a5fa; --blue-soft:#10213f;
+      --shadow:none;
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+
+  /* ===== Шапка ===== */
+  header{position:sticky;top:0;z-index:20;background:var(--bg);
+    padding:calc(10px + env(safe-area-inset-top)) 16px 8px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:10px}
+  header .t{flex:1;min-width:0}
+  header h1{font-size:20px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .icon-btn{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--card);
+    color:var(--text);font-size:22px;display:grid;place-items:center;cursor:pointer}
+  .spin{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  main{padding:12px 16px;max-width:760px;margin:0 auto}
+  section.tab{display:none}
+  section.tab.active{display:block}
+  h2{font-size:17px;margin:18px 0 8px}
+  h2:first-child{margin-top:4px}
+
+  /* ===== Карточки ===== */
+  .card{background:var(--card);border-radius:16px;padding:14px;box-shadow:var(--shadow);
+    border:1px solid var(--line);margin-bottom:10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .grid2 .card{margin:0}
+  .kpi .label{font-size:13px;color:var(--muted)}
+  .kpi .value{font-size:24px;font-weight:700;margin-top:2px;letter-spacing:-.3px}
+  .kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .kpi.green{background:var(--green-soft);border-color:transparent}
+  .kpi.yellow{background:var(--yellow-soft);border-color:transparent}
+  .kpi.red{background:var(--red-soft);border-color:transparent}
+  .kpi.green .value{color:var(--green)} .kpi.yellow .value{color:var(--yellow)} .kpi.red .value{color:var(--red)}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600}
+  .badge.green{background:var(--green-soft);color:var(--green)}
+  .badge.yellow{background:var(--yellow-soft);color:var(--yellow)}
+  .badge.red{background:var(--red-soft);color:var(--red)}
+  .badge.gray{background:var(--line);color:var(--muted)}
+  .badge.blue{background:var(--blue-soft);color:var(--blue)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;background:currentColor}
+
+  /* Рекомендация в одну строку */
+  .rec{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;margin:6px 0;
+    font-size:14px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--muted)}
+  .rec.green{border-left-color:var(--green)} .rec.yellow{border-left-color:var(--yellow)} .rec.red{border-left-color:var(--red)}
+  .rec.blue{border-left-color:var(--blue)}
+
+  .banner{padding:10px 12px;border-radius:12px;margin-bottom:10px;font-size:14px}
+  .banner.err{background:var(--red-soft);color:var(--red)}
+  .banner.warn{background:var(--yellow-soft);color:var(--yellow)}
+  .banner.info{background:var(--blue-soft);color:var(--blue)}
+
+  .muted{color:var(--muted)} .small{font-size:13px}
+  .big{font-size:28px;font-weight:700}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .row > *{flex:1}
+  .between{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+  /* ===== Кнопки и формы (крупные, 16px — без зума в iOS) ===== */
+  .btn{min-height:48px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--card);
+    color:var(--text);font-size:16px;font-weight:600;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+  .btn.danger{color:var(--red)}
+  .btn:disabled{opacity:.4}
+  .btn.full{width:100%}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea{width:100%;min-height:46px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--bg);color:var(--text);font-size:16px;font-family:inherit}
+  textarea{min-height:90px}
+  input[type=checkbox]{width:24px;min-height:24px;height:24px;vertical-align:middle}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+  .fgrid7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .fgrid7 input{padding:8px 4px;text-align:center;font-size:14px}
+
+  /* ===== Таблицы ===== */
+  .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:12px;color:var(--muted);font-weight:600}
+  td.r,th.r{text-align:right;white-space:nowrap}
+  tr.hl-red td{background:var(--red-soft)} tr.hl-yellow td{background:var(--yellow-soft)}
+  .maxh{max-height:46vh;overflow-y:auto}
+
+  /* ===== Календарь ===== */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal .h{font-size:12px;color:var(--muted);text-align:center}
+  .cal .d{aspect-ratio:1;border-radius:10px;background:var(--bg);display:flex;flex-direction:column;align-items:center;
+    justify-content:center;font-size:15px;cursor:pointer;border:1px solid transparent;position:relative}
+  .cal .d.we{color:var(--muted)}
+  .cal .d.hol{background:var(--red-soft);color:var(--red);font-weight:700}
+  .cal .d.today{border-color:var(--accent)}
+  .cal .d .m{display:flex;gap:2px;height:6px;margin-top:2px}
+  .cal .d .m i{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+  .cal .d .m i.closure{background:var(--red)}
+
+  .stars{display:flex;gap:6px}
+  .stars button{flex:1;font-size:30px;min-height:56px;border-radius:14px;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--muted)}
+  .stars button.on{color:#f59e0b;background:var(--accent-soft)}
+
+  .chartbox{position:relative;height:260px}
+  .placeholder{height:200px;display:grid;place-items:center;color:var(--muted);text-align:center;border:1px dashed var(--line);border-radius:14px}
+
+  /* ===== Нижняя навигация ===== */
+  nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);
+    display:grid;grid-template-columns:repeat(5,1fr);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  nav.bottom button{background:none;border:0;color:var(--muted);font-size:11px;min-height:56px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;cursor:pointer;border-radius:12px}
+  nav.bottom button span{font-size:22px}
+  nav.bottom button.active{color:var(--accent);background:var(--accent-soft)}
+
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40;display:none}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:20px 20px 0 0;
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(110%);transition:transform .2s}
+  .sheet.open{transform:none}
+  .sheet-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .sheet-grid button{min-height:84px;border-radius:16px;border:1px solid var(--line);background:var(--bg);color:var(--text);
+    font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+  .sheet-grid button span{font-size:26px}
+
+  .toast{position:fixed;left:16px;right:16px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:50;background:var(--text);color:var(--bg);
+    padding:12px 14px;border-radius:14px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;text-align:center}
+  .toast.show{opacity:1}
+  .list-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .list-item:last-child{border-bottom:0}
+  .x{border:0;background:none;color:var(--muted);font-size:20px;min-width:40px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t">
+    <h1 id="hTitle">Пульс пекарни</h1>
+    <div class="sub" id="hSub">—</div>
+  </div>
+  <button class="icon-btn" id="btnRefresh" data-act="refresh" aria-label="Обновить"><span id="refreshIcon">⟳</span></button>
+</header>
+
+<main>
+  <section class="tab" id="tab-settings"></section>
+  <section class="tab" id="tab-summary"></section>
+  <section class="tab" id="tab-forecast"></section>
+  <section class="tab" id="tab-fact"></section>
+  <section class="tab" id="tab-returns"></section>
+  <section class="tab" id="tab-calendar"></section>
+  <section class="tab" id="tab-reviews"></section>
+  <section class="tab" id="tab-stock"></section>
+  <section class="tab" id="tab-shifts"></section>
+  <section class="tab" id="tab-chart"></section>
+  <section class="tab" id="tab-analysis"></section>
+</main>
+
+<nav class="bottom" id="nav">
+  <button data-tab="summary"><span>📊</span>Сводка</button>
+  <button data-tab="forecast"><span>🔮</span>Прогноз</button>
+  <button data-tab="fact"><span>🧾</span>Факт</button>
+  <button data-tab="analysis"><span>🔍</span>Анализ</button>
+  <button data-act="menu"><span>☰</span>Ещё</button>
+</nav>
+
+<div class="sheet-bg" id="sheetBg" data-act="menuClose"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-grid">
+    <button data-tab="settings"><span>⚙️</span>Настройки</button>
+    <button data-tab="summary"><span>📊</span>Сводка</button>
+    <button data-tab="forecast"><span>🔮</span>Прогноз</button>
+    <button data-tab="fact"><span>🧾</span>Факт vs План</button>
+    <button data-tab="returns"><span>↩️</span>Возвраты</button>
+    <button data-tab="calendar"><span>📅</span>Календарь</button>
+    <button data-tab="reviews"><span>⭐</span>Отзывы</button>
+    <button data-tab="stock"><span>📦</span>Склад</button>
+    <button data-tab="shifts"><span>👥</span>Смены</button>
+    <button data-tab="chart"><span>📈</span>График</button>
+    <button data-tab="analysis"><span>🔍</span>Анализ</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+if (!window.luxon) {
+  document.querySelector('main').innerHTML =
+    '<div class="banner err">Не загрузились библиотеки (нет интернета при первом запуске). Подключитесь к сети и обновите страницу.</div>';
+  throw new Error('luxon not loaded');
+}
+const { DateTime } = luxon;
+
+/* =====================================================================
+   1. ХРАНИЛИЩЕ: localStorage + кэш с TTL 15 минут
+   ===================================================================== */
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Не удалось сохранить: память браузера заполнена'); } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const CACHE_TTL = 15 * 60 * 1000; // 15 минут
+
+// Возвращает кэш, если он свежий (или любой при allowStale — для работы без сети)
+function cacheGet(key, allowStale) {
+  const c = LS.get('bk_cache_' + key, null);
+  if (!c) return null;
+  const fresh = Date.now() - c.t < CACHE_TTL;
+  return (fresh || allowStale) ? { data: c.d, t: c.t, stale: !fresh } : null;
+}
+function cacheSet(key, d) { LS.set('bk_cache_' + key, { t: Date.now(), d }); }
+// Чистим кэш старше 3 дней, чтобы не переполнить память Safari
+function cacheCleanup() {
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith('bk_cache_')).forEach(k => {
+      const c = LS.get(k, null);
+      if (!c || Date.now() - c.t > 3 * 864e5) localStorage.removeItem(k);
+    });
+  } catch (e) {}
+}
+
+/* =====================================================================
+   2. СПРАВОЧНИКИ И НАСТРОЙКИ ПО УМОЛЧАНИЮ
+   ===================================================================== */
+// Коэффициенты в процентах; редактируются во вкладке «Настройки»
+const DEFAULT_SETTINGS = {
+  owmKey: '',
+  coefs: {
+    rainHeavy: 15,  // осадки > 5 мм: −15%
+    rainMid: 10,    // осадки 2–5 мм: −10%
+    frost: 5,       // температура < 0°C: −5%
+    wind: 7,        // ветер > 10 м/с: −7%
+    holiday: 10,    // праздничный день: +10%
+    weekend: 5,     // выходной: +5%
+    event: 7,       // городское мероприятие: +7%
+    closure: -10    // перекрытие улицы/ремонт: −10%
+  },
+  limits: {
+    rainHeavyMm: 5, rainMidMm: 2, windMs: 10,
+    strongWindMs: 15,  // «сильный ветер» → красный статус
+    hardFrostC: -15,   // «мороз» → красный статус
+    itemReturnQty: 3,  // столько возвратов позиции за день → подсветка в «Склад»
+    writeoffYellow: 3, writeoffRed: 5,  // доля списаний от выручки, %
+    staffHourLow: 1500, staffHourHigh: 4500 // план выручки на 1 человеко-час, ₽
+  },
+  // Праздничные (нерабочие) дни РФ — простой массив, дополняйте вручную
+  holidays: [
+    '2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05','2026-01-06','2026-01-07','2026-01-08','2026-01-09',
+    '2026-02-23','2026-03-08','2026-03-09','2026-05-01','2026-05-09','2026-05-11','2026-06-12','2026-11-04','2026-12-31',
+    '2027-01-01','2027-01-02','2027-01-03','2027-01-04','2027-01-05','2027-01-06','2027-01-07','2027-01-08',
+    '2027-02-23','2027-03-08','2027-05-01','2027-05-09','2027-06-12','2027-11-04'
+  ]
+};
+
+// Поля OLAP-отчёта iiko (iikoServer / iikoOffice). Если в вашей версии имена другие —
+// поправьте здесь (iikoOffice → Отчёты → OLAP → список полей).
+const F = {
+  date: 'OpenDate.Typed', order: 'OrderNum', hour: 'HourOpen', time: 'CloseTime',
+  dish: 'DishName', storned: 'Storned', deleted: 'OrderDeleted', reason: 'RemovalType',
+  dept: 'Department.Id', sum: 'DishDiscountSumInt', qty: 'DishAmountInt', orders: 'UniqOrderId.OrdersCount'
+};
+
+const EVENT_TYPES = { holiday: 'Праздник', weekend: 'Выходной', event: 'Мероприятие', closure: 'Перекрытие' };
+const WEEKDAYS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+// Позиции для демо-режима и анализа ассортимента
+const DEMO_ITEMS = [
+  { name: 'Булочка', price: 120, w: 0.15, ret: 0.010 },
+  { name: 'Круассан', price: 160, w: 0.22, ret: 0.035 },
+  { name: 'Сэндвич', price: 290, w: 0.13, ret: 0.025 },
+  { name: 'Капучино', price: 220, w: 0.30, ret: 0.006 },
+  { name: 'Латте', price: 240, w: 0.20, ret: 0.006 }
+];
+
+/* =====================================================================
+   3. СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+   ===================================================================== */
+function loadSettings() {
+  const s = LS.get('bk_settings', {});
+  return {
+    owmKey: s.owmKey || '',
+    coefs: { ...DEFAULT_SETTINGS.coefs, ...(s.coefs || {}) },
+    limits: { ...DEFAULT_SETTINGS.limits, ...(s.limits || {}) },
+    holidays: Array.isArray(s.holidays) ? s.holidays : DEFAULT_SETTINGS.holidays.slice()
+  };
+}
+const S = {
+  venues: LS.get('bk_venues', []),
+  selected: LS.get('bk_selected', null),
+  settings: loadSettings(),
+  events: LS.get('bk_events', []),
+  reviews: LS.get('bk_reviews', {}),     // {venueId: {ratings:{дата:оценка}, comments:[...]}}
+  writeoffs: LS.get('bk_writeoffs', {}), // {venueId: {дата: [...]}}
+  staff: LS.get('bk_staff', {}),         // {venueId: {дата: [...]}}
+  snaps: LS.get('bk_snaps', {}),         // снимки прогноза по дням для графика
+  day: null, wx: null, loading: false,
+  tab: LS.get('bk_tab', 'summary'),
+  editing: null, calMonth: null, charts: {}
+};
+const persist = name => LS.set('bk_' + name, S[name]);
+const cur = () => S.venues.find(v => v.id === S.selected) || S.venues[0] || null;
+
+/* =====================================================================
+   4. УТИЛИТЫ
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const NF = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+const rub = n => (n == null || !isFinite(n)) ? '—' : NF.format(Math.round(n)) + ' ₽';
+const pct = (n, d = 1) => (n == null || !isFinite(n)) ? '—' : n.toLocaleString('ru-RU', { minimumFractionDigits: d && Math.abs(n) < 10 ? d : 0, maximumFractionDigits: d }) + '%';
+const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+const sum = (arr, k) => arr.reduce((s, x) => s + (+x[k] || 0), 0);
+const sumPct = f => f.reduce((s, x) => s + (+x.pct || 0), 0);
+const todayISO = () => DateTime.now().toISODate();
+const uid = () => Math.random().toString(36).slice(2, 10);
+const toNum = v => { const n = parseFloat(String(v ?? '').replace(',', '.').replace(/\s/g, '')); return isFinite(n) ? n : null; };
+const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
+const planFor = (v, iso) => +(v.plan || [])[DateTime.fromISO(iso).weekday - 1] || 0;
+
+// SHA-1 для пароля iiko (iiko принимает хэш, сам пароль не храним)
+function sha1(str) {
+  const u = unescape(encodeURIComponent(str)), b = [];
+  for (let i = 0; i < u.length; i++) b.push(u.charCodeAt(i));
+  const ml = b.length * 8; b.push(0x80);
+  while (b.length % 64 !== 56) b.push(0);
+  for (let i = 7; i >= 0; i--) b.push(i >= 4 ? 0 : (ml >>> (i * 8)) & 255);
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0; const w = [];
+  for (let o = 0; o < b.length; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = (b[o + 4 * i] << 24) | (b[o + 4 * i + 1] << 16) | (b[o + 4 * i + 2] << 8) | b[o + 4 * i + 3];
+    for (let i = 16; i < 80; i++) { const t = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]; w[i] = (t << 1) | (t >>> 31); }
+    let a = h0, bb = h1, c = h2, d = h3, e = h4;
+    for (let i = 0; i < 80; i++) {
+      let f, k;
+      if (i < 20) { f = (bb & c) | (~bb & d); k = 0x5A827999; }
+      else if (i < 40) { f = bb ^ c ^ d; k = 0x6ED9EBA1; }
+      else if (i < 60) { f = (bb & c) | (bb & d) | (c & d); k = 0x8F1BBCDC; }
+      else { f = bb ^ c ^ d; k = 0xCA62C1D6; }
+      const t = (((a << 5) | (a >>> 27)) + f + e + k + w[i]) | 0;
+      e = d; d = c; c = (bb << 30) | (bb >>> 2); bb = a; a = t;
+    }
+    h0 = (h0 + a) | 0; h1 = (h1 + bb) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+  }
+  return [h0, h1, h2, h3, h4].map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+// Детерминированный генератор случайных чисел (демо-данные не «прыгают» при обновлении)
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// Профиль продаж пекарни по часам: утро сильнее вечера
+const hourWeight = h => h < 11 ? 1.6 : h < 15 ? 1.2 : h < 18 ? 0.9 : 0.7;
+// Какая доля дневного плана «должна» быть сделана к текущему моменту
+function expectedShare(v) {
+  const now = DateTime.now(), t = now.hour + now.minute / 60;
+  let total = 0, done = 0;
+  for (let h = v.open; h < v.close; h++) {
+    const w = hourWeight(h); total += w;
+    if (t >= h + 1) done += w; else if (t > h) done += w * (t - h);
+  }
+  return total ? done / total : 0;
+}
+
+/* =====================================================================
+   5. КАЛЕНДАРЬ: праздники, выходные, события
+   ===================================================================== */
+const eventsFor = (iso, vid) => S.events.filter(e => e.date === iso && (e.venueId === 'all' || e.venueId === vid));
+const isHoliday = iso => S.settings.holidays.includes(iso);
+const isWeekend = iso => DateTime.fromISO(iso).weekday >= 6;
+
+function calendarFactors(iso, vid) {
+  const c = S.settings.coefs, f = [];
+  if (isHoliday(iso)) f.push({ label: 'Праздничный день', pct: c.holiday });
+  else if (isWeekend(iso)) f.push({ label: 'Выходной', pct: c.weekend });
+  eventsFor(iso, vid).forEach(e => f.push({ label: `${EVENT_TYPES[e.type] || 'Событие'}: ${e.title}`, pct: +e.coef || 0 }));
+  return f;
+}
+
+/* =====================================================================
+   6. ПОГОДА: OpenWeatherMap (прогноз на сегодня по координатам точки)
+   ===================================================================== */
+async function http(url, opts = {}, timeout = 20000) {
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeout);
+  try { return await fetch(url, { ...opts, signal: ctl.signal }); }
+  finally { clearTimeout(tm); }
+}
+
+async function loadWeather(v, force) {
+  if (!S.settings.owmKey) return { error: 'Добавьте ключ OpenWeather в настройках — погода пока не учитывается' };
+  if (v.lat == null || v.lon == null) return { error: 'У точки не заданы координаты' };
+  const iso = todayISO();
+  const key = `wx_${(+v.lat).toFixed(3)}_${(+v.lon).toFixed(3)}_${iso}`;
+  if (!force) { const c = cacheGet(key); if (c) return { wx: c.data, t: c.t }; }
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${v.lat}&lon=${v.lon}&units=metric&lang=ru&appid=${encodeURIComponent(S.settings.owmKey)}`;
+    const r = await http(url);
+    if (r.status === 401) throw new Error('Неверный ключ OpenWeather (новый ключ активируется до 2 часов)');
+    if (r.status === 429) throw new Error('Превышен лимит запросов OpenWeather');
+    if (!r.ok) throw new Error('OpenWeather ответил ошибкой ' + r.status);
+    const j = await r.json();
+    // Берём 3-часовые интервалы на сегодня; поздно вечером — ближайшие два
+    let list = j.list.filter(x => DateTime.fromSeconds(x.dt).toISODate() === iso);
+    if (list.length < 2) list = j.list.slice(0, 2);
+    const temps = list.map(x => x.main.temp);
+    const wx = {
+      temp: Math.round(temps.reduce((a, b) => a + b, 0) / temps.length),
+      tmin: Math.round(Math.min(...temps)), tmax: Math.round(Math.max(...temps)),
+      precip: +list.reduce((s, x) => s + (x.rain?.['3h'] || 0) + (x.snow?.['3h'] || 0), 0).toFixed(1),
+      wind: +Math.max(...list.map(x => x.wind.speed)).toFixed(1),
+      desc: list[Math.floor(list.length / 2)].weather[0].description,
+      main: list[Math.floor(list.length / 2)].weather[0].main,
+      city: j.city?.name || ''
+    };
+    cacheSet(key, wx);
+    return { wx, t: Date.now() };
+  } catch (e) {
+    const c = cacheGet(key, true);
+    const msg = e.name === 'AbortError' ? 'OpenWeather не ответил за 20 секунд' : (e.message === 'Failed to fetch' || e instanceof TypeError ? 'Нет связи с OpenWeather' : e.message);
+    return c ? { wx: c.data, t: c.t, error: msg + ' — показан последний прогноз' } : { error: msg };
+  }
+}
+
+function weatherIcon(wx) {
+  if (!wx) return '🌤';
+  return { Rain: '🌧', Drizzle: '🌦', Snow: '🌨', Thunderstorm: '⛈', Clear: '☀️', Clouds: '☁️' }[wx.main] || '🌫';
+}
+
+// Погодные коэффициенты (в процентах, вычитаются из прогноза)
+function weatherFactors(wx) {
+  if (!wx) return [];
+  const c = S.settings.coefs, L = S.settings.limits, f = [];
+  if (wx.precip > L.rainHeavyMm) f.push({ label: `Сильные осадки ${num(wx.precip)} мм`, pct: c.rainHeavy });
+  else if (wx.precip >= L.rainMidMm) f.push({ label: `Осадки ${num(wx.precip)} мм`, pct: c.rainMid });
+  if (wx.temp < 0) f.push({ label: `Минусовая температура ${wx.temp}°C`, pct: c.frost });
+  if (wx.wind > L.windMs) f.push({ label: `Ветер ${num(wx.wind)} м/с`, pct: c.wind });
+  return f;
+}
+
+/* =====================================================================
+   7. iiko: авторизация, OLAP-отчёт по продажам, кассовые смены
+   ===================================================================== */
+// Сборка URL: адрес сервера точки + путь; при необходимости — через CORS-прокси
+function iikoUrl(v, path) {
+  const base = v.apiUrl.replace(/\/+$/, '').replace(/\/resto$/, '');
+  const full = base + path;
+  return v.proxy ? v.proxy + encodeURIComponent(full) : full;
+}
+function iikoError(e, status) {
+  if (e && e.name === 'AbortError') return 'Сервер iiko не ответил за 20 секунд. Проверьте, что сервер включён и доступен из интернета.';
+  if (status === 401 || status === 403) return 'iiko: неверный логин/пароль или у пользователя нет прав на отчёты (OLAP).';
+  if (status) return `iiko вернул ошибку ${status}. Проверьте адрес сервера и depotId.`;
+  return 'Сервер iiko недоступен или блокирует запросы из браузера (CORS). Проверьте адрес, доступ к серверу или укажите прокси в настройках точки.';
+}
+async function iikoReq(v, path, opts) {
+  let r;
+  try { r = await http(iikoUrl(v, path), opts); } catch (e) { throw new Error(iikoError(e)); }
+  if (!r.ok) throw new Error(iikoError(null, r.status));
+  return r;
+}
+function olapBody(from, to, groupBy, v, extraFilters = {}) {
+  const filters = {
+    [F.date]: { filterType: 'DateRange', periodType: 'CUSTOM', from, to, includeLow: true, includeHigh: false },
+    ...extraFilters
+  };
+  if (v.depotId) filters[F.dept] = { filterType: 'IncludeValues', values: [v.depotId] };
+  return { reportType: 'SALES', buildSummary: false, groupByRowFields: groupBy, groupByColFields: [], aggregateFields: [F.sum, F.qty], filters };
+}
+
+async function iikoLoad(v, iso) {
+  if (!v.apiUrl || !v.login || !v.passHash) throw new Error('Для точки не заполнены адрес iiko, логин или пароль (Настройки).');
+  // 1) получаем токен
+  const tokenRes = await iikoReq(v, `/resto/api/auth?login=${encodeURIComponent(v.login)}&pass=${v.passHash}`);
+  const key = (await tokenRes.text()).trim();
+  const post = body => iikoReq(v, `/resto/api/v2/reports/olap?key=${key}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  }).then(r => r.json());
+  try {
+    const tomorrow = DateTime.fromISO(iso).plus({ days: 1 }).toISODate();
+    const weekAgo = DateTime.fromISO(iso).minus({ days: 6 }).toISODate();
+    // 2) детализация за сегодня: чек × позиция, включая удалённые и сторно
+    const todayP = post(olapBody(iso, tomorrow,
+      [F.order, F.time, F.hour, F.dish, F.storned, F.deleted, F.reason], v,
+      { [F.deleted]: { filterType: 'IncludeValues', values: ['NOT_DELETED', 'DELETED'] } }));
+    // 3) история за 7 дней по датам (для графика)
+    const histP = post({ ...olapBody(weekAgo, tomorrow, [F.date], v), aggregateFields: [F.sum, F.orders] });
+    // 4) кассовые смены (не критично — ошибки игнорируем)
+    const shiftsP = iikoReq(v, `/resto/api/v2/cashshifts/list?openDateFrom=${iso}&openDateTo=${iso}&status=ANY&key=${key}`)
+      .then(r => r.json()).catch(() => []);
+    const [today, hist, shifts] = await Promise.all([todayP, histP, shiftsP]);
+    return normalizeIiko(today.data || [], hist.data || [], Array.isArray(shifts) ? shifts : []);
+  } finally {
+    // освобождаем лицензию iiko
+    http(iikoUrl(v, `/resto/api/logout?key=${key}`)).catch(() => {});
+  }
+}
+
+// Приводим строки OLAP к единому формату: заказы (продажа/возврат/отмена) + история
+function normalizeIiko(rows, histRows, shifts) {
+  const map = {};
+  rows.forEach(r => {
+    const deleted = r[F.deleted] && r[F.deleted] !== 'NOT_DELETED';
+    const storned = String(r[F.storned]).toUpperCase() === 'TRUE';
+    const type = deleted ? 'cancel' : storned ? 'return' : 'sale';
+    const k = type + ':' + r[F.order];
+    let time = '';
+    if (r[F.time]) { const dt = DateTime.fromISO(String(r[F.time]).replace(' ', 'T')); time = dt.isValid ? dt.toFormat('HH:mm') : String(r[F.time]).slice(11, 16); }
+    const o = map[k] || (map[k] = { num: r[F.order], time, hour: +r[F.hour] || 0, sum: 0, qty: 0, type, reason: '', items: {}, itemSums: {} });
+    const s = Math.abs(+r[F.sum] || 0), q = Math.abs(+r[F.qty] || 0);
+    o.sum += s; o.qty += q;
+    o.items[r[F.dish]] = (o.items[r[F.dish]] || 0) + q;
+    o.itemSums[r[F.dish]] = (o.itemSums[r[F.dish]] || 0) + s;
+    if (r[F.reason]) o.reason = r[F.reason];
+    if (!o.time && o.hour) o.time = String(o.hour).padStart(2, '0') + ':00';
+  });
+  const orders = Object.values(map).sort((a, b) => a.time.localeCompare(b.time));
+  const history = histRows.map(r => ({ date: String(r[F.date]).slice(0, 10), sum: +r[F.sum] || 0, checks: +r[F.orders] || 0 }));
+  const sh = shifts.map(s => ({
+    num: s.sessionNumber ?? s.number ?? '—',
+    open: s.openDate || '', close: s.closeDate || '',
+    cashier: s.responsibleUserName || s.cashierName || s.responsibleUserId || '—',
+    sum: s.payOrders ?? s.salesSum ?? null
+  }));
+  return { orders, history, shifts: sh, source: 'iiko' };
+}
+
+/* ===== Демо-данные: работают без iiko, чтобы посмотреть интерфейс ===== */
+function demoGen(v, iso) {
+  const rnd = rng(hashStr(v.id + '|' + iso));
+  const plan = planFor(v, iso) * (1 + sumPct(calendarFactors(iso, v.id)) / 100);
+  const nChecks = Math.round(plan * (0.82 + rnd() * 0.28) / 330);
+  const hours = []; for (let h = v.open; h < v.close; h++) hours.push(h);
+  const wsum = hours.reduce((s, h) => s + hourWeight(h), 0);
+  const reasons = ['Черствая выпечка', 'Не та позиция', 'Холодный напиток', 'Ошибка кассира'];
+  const orders = []; let n = 1000 + Math.floor(rnd() * 500);
+  const pick = () => { let x = rnd(), acc = 0; for (const it of DEMO_ITEMS) { acc += it.w; if (x <= acc) return it; } return DEMO_ITEMS[0]; };
+  hours.forEach(h => {
+    const cnt = Math.round(nChecks * hourWeight(h) / wsum);
+    for (let i = 0; i < cnt; i++) {
+      const m = Math.floor(rnd() * 60);
+      const o = { num: n++, time: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`, hour: h, sum: 0, qty: 0, type: 'sale', reason: '', items: {}, itemSums: {} };
+      const lines = 1 + (rnd() < 0.55 ? 1 : 0) + (rnd() < 0.2 ? 1 : 0);
+      for (let j = 0; j < lines; j++) {
+        const it = pick(), q = rnd() < 0.1 ? 2 : 1;
+        o.items[it.name] = (o.items[it.name] || 0) + q; o.itemSums[it.name] = (o.itemSums[it.name] || 0) + it.price * q;
+        o.sum += it.price * q; o.qty += q;
+      }
+      if (rnd() < 0.006) { o.type = 'cancel'; o.reason = 'Ошибка при пробитии'; }
+      orders.push(o);
+      // Возврат одной позиции из чека
+      const itName = Object.keys(o.items)[0], it = DEMO_ITEMS.find(x => x.name === itName);
+      if (o.type === 'sale' && rnd() < it.ret * 1.5) {
+        const mm = Math.min(59, m + 10 + Math.floor(rnd() * 30));
+        orders.push({ num: n++, time: `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, hour: h, sum: it.price, qty: 1,
+          type: 'return', reason: reasons[Math.floor(rnd() * reasons.length)], items: { [it.name]: 1 }, itemSums: { [it.name]: it.price } });
+      }
+    }
+  });
+  return orders.sort((a, b) => a.time.localeCompare(b.time));
+}
+function demoLoad(v, iso) {
+  const nowT = DateTime.now().toFormat('HH:mm');
+  const orders = demoGen(v, iso).filter(o => o.time <= nowT);
+  const history = [];
+  for (let i = 6; i >= 1; i--) {
+    const d = DateTime.fromISO(iso).minus({ days: i }).toISODate();
+    const os = demoGen(v, d);
+    const sales = os.filter(o => o.type === 'sale');
+    history.push({ date: d, sum: sum(sales, 'sum') - sum(os.filter(o => o.type === 'return'), 'sum'), checks: sales.length });
+  }
+  const sales = orders.filter(o => o.type === 'sale');
+  const shifts = orders.length ? [{ num: 1, open: `${iso} ${String(v.open).padStart(2, '0')}:00`, close: '', cashier: 'Кассир (демо)', sum: sum(sales, 'sum') }] : [];
+  return { orders, history, shifts, source: 'demo' };
+}
+
+// Загрузка данных дня с кэшем; при ошибке — показываем последний кэш
+async function loadDay(v, force) {
+  const iso = todayISO(), key = `iiko_${v.id}_${iso}`;
+  if (!force) { const c = cacheGet(key); if (c) return { ...c.data, fetchedAt: c.t }; }
+  try {
+    const d = v.demo ? demoLoad(v, iso) : await iikoLoad(v, iso);
+    cacheSet(key, d);
+    return { ...d, fetchedAt: Date.now() };
+  } catch (e) {
+    const c = cacheGet(key, true);
+    if (c) return { ...c.data, fetchedAt: c.t, stale: true, error: e.message };
+    return { orders: [], history: [], shifts: [], source: v.demo ? 'demo' : 'iiko', error: e.message };
+  }
+}
+
+/* =====================================================================
+   8. АНАЛИТИКА: план, факт, прогноз, статус дня, рекомендации
+   ===================================================================== */
+function aggItems(orders) {
+  const m = {};
+  orders.forEach(o => Object.keys(o.items).forEach(name => {
+    const it = m[name] || (m[name] = { name, qty: 0, sum: 0, retQty: 0, retSum: 0 });
+    if (o.type === 'sale') { it.qty += o.items[name]; it.sum += o.itemSums?.[name] || 0; }
+    if (o.type === 'return') { it.retQty += o.items[name]; it.retSum += o.itemSums?.[name] || 0; }
+  }));
+  return Object.values(m);
+}
+function itemFlag(it) {
+  const L = S.settings.limits;
+  if (it.retQty >= L.itemReturnQty * 2) return 'red';
+  if (it.retQty >= L.itemReturnQty || (it.qty && it.retQty >= 2 && it.retQty / it.qty > 0.05)) return 'yellow';
+  return '';
+}
+
+function ratingInfo(vid) {
+  const r = S.reviews[vid]?.ratings || {};
+  const iso = todayISO();
+  const dates = Object.keys(r).filter(d => d <= iso).sort();
+  if (!dates.length) return null;
+  const last = dates[dates.length - 1];
+  const from = DateTime.fromISO(last).minus({ days: 7 }).toISODate();
+  const prev = dates.filter(d => d < last && d >= from).map(d => r[d]);
+  const prevAvg = prev.length ? prev.reduce((a, b) => a + b, 0) / prev.length : null;
+  const delta = prevAvg == null ? 0 : r[last] - prevAvg;
+  const level = delta <= -1 ? 'red' : delta <= -0.5 ? 'yellow' : 'green';
+  return { value: r[last], date: last, prevAvg, delta, level };
+}
+
+function calc() {
+  const v = cur(); if (!v) return null;
+  const iso = todayISO(), d = S.day || { orders: [], history: [] };
+  const L = S.settings.limits;
+  const plan = planFor(v, iso);
+  const sales = d.orders.filter(o => o.type === 'sale');
+  const rets = d.orders.filter(o => o.type === 'return');
+  const cancels = d.orders.filter(o => o.type === 'cancel');
+  const gross = sum(sales, 'sum'), retSum = sum(rets, 'sum'), canSum = sum(cancels, 'sum');
+  const fact = gross - retSum;                      // факт = продажи − возвраты
+  const checks = sales.length;
+  const avg = checks ? gross / checks : 0;
+  const retShare = gross ? (retSum + canSum) / gross * 100 : 0; // доля возвратов и отмен
+  const pctFull = plan ? fact / plan * 100 : 0;    // выполнение дневного плана
+  const share = expectedShare(v);
+  const planNow = plan * share;
+  const noData = !S.day || (!!d.error && !d.orders.length); // данных ещё нет или iiko не ответил — темп не оцениваем
+  const pace = planNow > 0 && !noData ? fact / planNow * 100 : null; // темп относительно плана «на сейчас»
+
+  const wx = S.wx?.wx || null;
+  const wxF = weatherFactors(wx), calF = calendarFactors(iso, v.id);
+  const wxSum = sumPct(wxF), calSum = sumPct(calF);
+  // Итоговый прогноз = База × (1 − сумма погоды) × (1 + сумма календаря)
+  const forecast = plan * (1 - wxSum / 100) * (1 + calSum / 100);
+  const forecastNet = forecast * (1 - retShare / 100);
+  const remain = Math.max(0, plan - fact);
+  const needChecks = avg ? Math.ceil(remain / avg) : null;
+  const items = aggItems(d.orders);
+  const rating = ratingInfo(v.id);
+
+  // ----- Статус дня -----
+  const reasons = []; let status = 'green';
+  const up = (lvl, why) => { reasons.push(why); if (lvl === 'red' || (lvl === 'yellow' && status === 'green')) status = lvl; };
+  if (pace != null) {
+    if (pace < 80) up('red', `темп ${pct(pace, 0)} от плана`);
+    else if (pace < 95) up('yellow', `темп ${pct(pace, 0)} от плана`);
+  }
+  if (retShare > 3) up('red', `возвраты ${pct(retShare)}`);
+  else if (retShare > 1) up('yellow', `возвраты ${pct(retShare)}`);
+  if (wx) {
+    if (wx.wind > L.strongWindMs) up('red', `сильный ветер ${wx.wind} м/с`);
+    if (wx.tmin <= L.hardFrostC) up('red', `мороз ${wx.tmin}°C`);
+    if (wx.precip > 2) up('yellow', `осадки ${wx.precip} мм`);
+  }
+  if (noData && status === 'green') { status = 'gray'; reasons.push(S.day ? 'нет данных из iiko' : 'загрузка…'); }
+
+  // ----- Рекомендации (по одной строке) -----
+  const recs = [];
+  if (pace != null && pace < 80) recs.push({ l: 'red', t: `Отстаём от плана на ${pct(100 - pace, 0)} — усиль допродажи у кассы: кофе + выпечка` });
+  else if (pace != null && pace < 95) recs.push({ l: 'yellow', t: 'Темп чуть ниже плана — предложи комбо и проверь, что витрина полная' });
+  if (retShare > 3) recs.push({ l: 'red', t: `Доля возвратов ${pct(retShare)} — проверь свежесть выпечки и температуру витрины` });
+  else if (retShare > 1) recs.push({ l: 'yellow', t: `Много возвратов (${pct(retShare)}) — проверь температуру витрины` });
+  if (wx && wx.wind > L.strongWindMs) recs.push({ l: 'red', t: 'Сильный ветер — убери штендер, усиль доставку и самовывоз' });
+  if (wx && wx.tmin <= L.hardFrostC) recs.push({ l: 'red', t: 'Мороз — делай упор на горячие напитки и сытные сэндвичи' });
+  if (forecast < plan * 0.9) {
+    const w = wx && wx.precip >= L.rainMidMm ? 'дождь' : wx && wx.temp < 0 ? 'холодно' : wx && wx.wind > L.windMs ? 'ветрено' : 'погода против нас';
+    const ev = calF.some(f => f.pct > 0) ? 'мероприятие не спасает' : 'нет мероприятий';
+    recs.push({ l: 'yellow', t: `Сегодня ${w} и ${ev}: усиль промо у витрины` });
+  }
+  if (rating && rating.level !== 'green') recs.push({ l: rating.level, t: `Рейтинг ${num(rating.value)} (${signed(rating.delta)}) — проверь чистоту зала и скорость обслуживания` });
+  items.filter(itemFlag).forEach(it => recs.push({ l: itemFlag(it), t: `«${it.name}»: ${it.retQty} возвр. — проверь партию и срок годности` }));
+
+  // Снимок прогноза за день для графика «План / Прогноз / Факт»
+  S.snaps[v.id] = S.snaps[v.id] || {};
+  S.snaps[v.id][iso] = { plan, forecast: Math.round(forecast) };
+  const keep = DateTime.fromISO(iso).minus({ days: 60 }).toISODate();
+  Object.keys(S.snaps[v.id]).forEach(k => { if (k < keep) delete S.snaps[v.id][k]; });
+  persist('snaps');
+
+  return { v, iso, plan, fact, gross, retSum, canSum, checks, avg, retShare, pctFull, pace, share, planNow,
+    wx, wxF, calF, wxSum, calSum, forecast, forecastNet, remain, needChecks, items, rating,
+    status, reasons, recs, sales, rets, cancels };
+}
+const num = n => (+n).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+const STATUS = { green: 'Зелёный', yellow: 'Жёлтый', red: 'Красный', gray: 'Нет данных' };
+const recHTML = r => `<div class="rec ${r.l}">${r.l === 'red' ? '🔴' : r.l === 'yellow' ? '🟡' : r.l === 'blue' ? '🔵' : '🟢'} <span>${esc(r.t)}</span></div>`;
+const levelBy = (x, y, r) => x > r ? 'red' : x > y ? 'yellow' : 'green';
+
+function banners() {
+  let h = '';
+  const d = S.day;
+  if (d?.error) h += `<div class="banner err">⚠️ ${esc(d.error)}${d.stale ? `<br><small>Показаны данные от ${DateTime.fromMillis(d.fetchedAt).toFormat('HH:mm')}</small>` : ''}</div>`;
+  if (d?.source === 'demo') h += `<div class="banner info">Демо-режим: данные сгенерированы. Подключите iiko в «Настройках».</div>`;
+  return h;
+}
+function updatedLine() {
+  const d = S.day; if (!d?.fetchedAt) return '';
+  return `<div class="muted small" style="text-align:center;margin-top:8px">Обновлено ${DateTime.fromMillis(d.fetchedAt).toFormat('HH:mm')} · ${d.source === 'demo' ? 'демо' : 'iiko'} · кэш 15 мин</div>`;
+}
+
+/* =====================================================================
+   9. ОТРИСОВКА ВКЛАДОК
+   ===================================================================== */
+const RENDER = {};
+
+/* ----- 9.1 Настройки и выбор точки ----- */
+function venueForm(v) {
+  const isNew = !v.id; const p = v.plan || [60000, 60000, 60000, 62000, 70000, 85000, 80000];
+  return `<div class="card">
+    <b>${isNew ? 'Новое заведение' : 'Редактирование: ' + esc(v.name)}</b>
+    <div class="fgrid">
+      <div><label>Название</label><input id="vf_name" value="${esc(v.name || '')}" placeholder="Пекарня на Ленина"></div>
+      <div><label>Город</label><input id="vf_city" value="${esc(v.city || '')}" placeholder="Казань"></div>
+    </div>
+    <label><input type="checkbox" id="vf_demo" ${v.demo ? 'checked' : ''}> Демо-данные (без подключения к iiko)</label>
+    <label>Адрес iiko API (сервер этой точки)</label>
+    <input id="vf_api" value="${esc(v.apiUrl || '')}" placeholder="https://bakery-lenina.iiko.it:443" autocapitalize="off" autocorrect="off">
+    <div class="fgrid">
+      <div><label>Логин iiko</label><input id="vf_login" value="${esc(v.login || '')}" autocapitalize="off" autocorrect="off"></div>
+      <div><label>Пароль ${v.passHash ? '(сохранён)' : ''}</label><input id="vf_pass" type="password" placeholder="${v.passHash ? 'не менять' : ''}"></div>
+    </div>
+    <label>ID заведения (depotId / Department.Id)</label>
+    <input id="vf_depot" value="${esc(v.depotId || '')}" placeholder="a1b2c3d4-...-..." autocapitalize="off">
+    <button class="btn full" data-act="deptFind" style="margin-top:8px">🔎 Найти точки на сервере iiko</button>
+    <div id="deptList">${deptListHTML()}</div>
+    <div class="fgrid">
+      <div><label>Широта (lat)</label><input id="vf_lat" inputmode="decimal" value="${v.lat ?? ''}" placeholder="55.7558"></div>
+      <div><label>Долгота (lon)</label><input id="vf_lon" inputmode="decimal" value="${v.lon ?? ''}" placeholder="37.6173"></div>
+      <div><label>Открытие, час</label><input id="vf_open" inputmode="numeric" value="${v.open ?? 8}"></div>
+      <div><label>Закрытие, час</label><input id="vf_close" inputmode="numeric" value="${v.close ?? 22}"></div>
+    </div>
+    <label>CORS-прокси (необязательно)</label>
+    <input id="vf_proxy" value="${esc(v.proxy || '')}" placeholder="https://iiko-proxy.ваш-аккаунт.workers.dev/?url=" autocapitalize="off">
+    <label>План выручки по дням недели, ₽</label>
+    <div class="fgrid7">${WEEKDAYS.map((w, i) => `<div><div class="muted small" style="text-align:center">${w}</div><input id="vf_plan${i}" inputmode="numeric" value="${p[i] ?? ''}"></div>`).join('')}</div>
+    <div class="row">
+      <button class="btn" data-act="venueCancel">Отмена</button>
+      <button class="btn primary" data-act="venueSave">Сохранить</button>
+    </div>
+  </div>`;
+}
+RENDER.settings = () => {
+  const v = cur(), s = S.settings, c = s.coefs, L = s.limits;
+  const inp = (id, label, value) => `<div><label>${label}</label><input id="${id}" inputmode="decimal" value="${value}"></div>`;
+  $('#tab-settings').innerHTML = `
+    <h2>Выберите заведение</h2>
+    <div class="card">
+      <select id="venueSelect">${S.venues.map(x => `<option value="${x.id}" ${v && x.id === v.id ? 'selected' : ''}>${esc(x.name)}${x.city ? ' · ' + esc(x.city) : ''}</option>`).join('') || '<option>Нет заведений</option>'}</select>
+      ${v ? `<div class="muted small" style="margin-top:6px">${v.demo ? 'Демо-данные' : esc(v.apiUrl)} · depotId: ${esc(v.depotId || '—')} · ${v.lat ?? '—'}, ${v.lon ?? '—'}</div>` : ''}
+      <div class="row">
+        <button class="btn" data-act="venueAdd">＋ Добавить</button>
+        <button class="btn" data-act="venueEdit" ${v ? '' : 'disabled'}>✎ Изменить</button>
+        <button class="btn danger" data-act="venueDel" ${v ? '' : 'disabled'}>Удалить</button>
+      </div>
+    </div>
+    ${S.editing ? venueForm(S.editing) : ''}
+
+    <h2>OpenWeather</h2>
+    <div class="card">
+      <label>API-ключ OpenWeatherMap</label>
+      <input id="s_owm" value="${esc(s.owmKey)}" placeholder="32 символа" autocapitalize="off" autocorrect="off">
+    </div>
+
+    <h2>Коэффициенты прогноза, %</h2>
+    <div class="card"><div class="fgrid">
+      ${inp('c_rainHeavy', `Осадки &gt; ${L.rainHeavyMm} мм (−)`, c.rainHeavy)}
+      ${inp('c_rainMid', `Осадки ${L.rainMidMm}–${L.rainHeavyMm} мм (−)`, c.rainMid)}
+      ${inp('c_frost', 'Температура &lt; 0°C (−)', c.frost)}
+      ${inp('c_wind', `Ветер &gt; ${L.windMs} м/с (−)`, c.wind)}
+      ${inp('c_holiday', 'Праздник (+)', c.holiday)}
+      ${inp('c_weekend', 'Выходной (+)', c.weekend)}
+      ${inp('c_event', 'Мероприятие (+)', c.event)}
+      ${inp('c_closure', 'Перекрытие (знак ±)', c.closure)}
+    </div></div>
+
+    <h2>Пороги</h2>
+    <div class="card"><div class="fgrid">
+      ${inp('l_rainHeavyMm', 'Сильные осадки, мм', L.rainHeavyMm)}
+      ${inp('l_rainMidMm', 'Осадки, мм', L.rainMidMm)}
+      ${inp('l_windMs', 'Ветер для прогноза, м/с', L.windMs)}
+      ${inp('l_strongWindMs', 'Сильный ветер (красный), м/с', L.strongWindMs)}
+      ${inp('l_hardFrostC', 'Мороз (красный), °C', L.hardFrostC)}
+      ${inp('l_itemReturnQty', 'Возвратов позиции для подсветки', L.itemReturnQty)}
+      ${inp('l_writeoffYellow', 'Списания: жёлтый, %', L.writeoffYellow)}
+      ${inp('l_writeoffRed', 'Списания: красный, %', L.writeoffRed)}
+      ${inp('l_staffHourLow', 'Выручка/чел.-час: мин, ₽', L.staffHourLow)}
+      ${inp('l_staffHourHigh', 'Выручка/чел.-час: макс, ₽', L.staffHourHigh)}
+    </div></div>
+
+    <h2>Праздничные дни РФ</h2>
+    <div class="card">
+      <div class="muted small">По одной дате в строке, формат ГГГГ-ММ-ДД</div>
+      <textarea id="s_holidays" style="min-height:140px">${s.holidays.join('\n')}</textarea>
+    </div>
+    <button class="btn primary full" data-act="settingsSave">Сохранить настройки</button>
+
+    <h2>Резервная копия и перенос на iPhone</h2>
+    <div class="card">
+      <div class="muted small">Safari и иконка на экране «Домой» хранят данные раздельно. Скопируйте настройки здесь и вставьте в приложении.</div>
+      <textarea id="backupText" placeholder="Нажмите «Экспорт» или вставьте сюда скопированные данные"></textarea>
+      <div class="row">
+        <button class="btn" data-act="backupExport">Экспорт</button>
+        <button class="btn" data-act="backupImport">Импорт</button>
+      </div>
+      <div class="row"><button class="btn danger" data-act="cacheClear">Очистить кэш данных</button></div>
+    </div>`;
+};
+
+/* ----- 9.2 Сводка: 6 карточек ----- */
+RENDER.summary = () => {
+  const m = calc(); const el = $('#tab-summary');
+  if (!m) { el.innerHTML = `<div class="banner warn">Добавьте заведение во вкладке «Настройки».</div><button class="btn primary full" data-tab="settings">Открыть настройки</button>`; return; }
+  const pctLevel = m.pace == null ? '' : m.pace >= 95 ? 'green' : m.pace >= 80 ? 'yellow' : 'red';
+  const wxLevel = !m.wx ? '' : m.wxSum === 0 ? 'green' : m.wxSum <= 10 ? 'yellow' : 'red';
+  const ev = eventsFor(m.iso, m.v.id);
+  const hol = isHoliday(m.iso);
+  el.innerHTML = `
+    ${banners()}
+    ${(ev.length || hol) ? `<div class="rec blue">📌 <span>Сегодня ${hol ? '<b>праздничный день</b> (+' + S.settings.coefs.holiday + '%)' : ''}${hol && ev.length ? ', ' : ''}${ev.map(e => `<b>${esc(e.title)}</b> (${signed(+e.coef)}%)`).join(', ')}</span></div>` : ''}
+    <div class="grid2">
+      <div class="card kpi"><div class="label">План выручки</div><div class="value">${rub(m.plan)}</div><div class="sub">на ${m.share > 0 && m.share < 1 ? DateTime.now().toFormat('HH:mm') + ' — ' + rub(m.planNow) : 'весь день'}</div></div>
+      <div class="card kpi"><div class="label">Факт (iiko)</div><div class="value">${rub(m.fact)}</div><div class="sub">${m.checks} чеков</div></div>
+      <div class="card kpi ${pctLevel}"><div class="label">% выполнения</div><div class="value">${pct(m.pctFull, 0)}</div><div class="sub">${m.pace == null ? (m.share > 0 ? 'нет данных о продажах' : 'день ещё не начался') :'темп: ' + pct(m.pace, 0) + ' от плана на сейчас'}</div></div>
+      <div class="card kpi"><div class="label">Средний чек</div><div class="value">${m.avg ? rub(m.avg) : '—'}</div><div class="sub">${m.needChecks ? 'ещё ' + m.needChecks + ' чеков до плана' : m.plan && m.fact >= m.plan ? 'план выполнен ✅' : ''}</div></div>
+      <div class="card kpi ${wxLevel}"><div class="label">Погода</div>
+        ${m.wx ? `<div class="value">${weatherIcon(m.wx)} ${m.wx.temp > 0 ? '+' : ''}${m.wx.temp}°</div>
+          <div class="sub">${m.wx.precip} мм · ветер ${m.wx.wind} м/с</div>
+          <div class="sub"><b>Влияние: ${m.wxSum ? '−' + m.wxSum + '%' : 'нет'}</b></div>`
+        : `<div class="value">—</div><div class="sub">${esc(S.wx?.error || 'нет данных')}</div>`}
+      </div>
+      <div class="card kpi ${m.status}"><div class="label">Статус дня</div>
+        <div class="value"><span class="badge ${m.status}" style="font-size:16px"><span class="dot"></span>${STATUS[m.status]}</span></div>
+        <div class="sub">${esc(m.reasons.join(', ') || 'всё в норме')}</div>
+      </div>
+    </div>
+    ${m.recs.slice(0, 3).map(recHTML).join('')}
+    ${m.recs.length > 3 ? `<button class="btn full" data-tab="analysis">Ещё ${m.recs.length - 3} рекомендаций → Анализ</button>` : ''}
+    ${updatedLine()}`;
+};
+
+/* ----- 9.3 Прогноз выручки ----- */
+RENDER.forecast = () => {
+  const m = calc(); const el = $('#tab-forecast'); if (!m) { el.innerHTML = ''; return; }
+  const row = (f, sign) => `<div class="list-item"><span>${esc(f.label)}</span><b>${sign}${Math.abs(f.pct)}%</b></div>`;
+  const diff = m.forecast - m.plan;
+  el.innerHTML = `
+    ${banners()}
+    <div class="card kpi ${m.forecast >= m.plan * 0.95 ? 'green' : m.forecast >= m.plan * 0.85 ? 'yellow' : 'red'}">
+      <div class="label">Ожидаемая выручка</div>
+      <div class="value">${rub(m.forecast)}</div>
+      <div class="sub">${signed(Math.round(diff / (m.plan || 1) * 1000) / 10)}% к плану · с учётом возвратов (${pct(m.retShare)}): ${rub(m.forecastNet)}</div>
+    </div>
+    <div class="grid2">
+      <div class="card kpi"><div class="label">Базовый прогноз = план</div><div class="value">${rub(m.plan)}</div></div>
+      <div class="card kpi"><div class="label">Нужно ещё до плана</div><div class="value">${!m.remain ? '✅' : m.needChecks != null ? m.needChecks + ' чеков' : rub(m.remain)}</div><div class="sub">${m.remain ? rub(m.remain) + (m.avg ? ' при чеке ' + rub(m.avg) : '') : 'план выполнен'}</div></div>
+    </div>
+    <h2>Погода ${m.wx ? '· ' + esc(m.wx.desc) : ''}</h2>
+    <div class="card">${m.wxF.length ? m.wxF.map(f => row(f, '−')).join('') : `<div class="muted">${m.wx ? 'Погода не влияет' : esc(S.wx?.error || 'Нет данных о погоде')}</div>`}
+      <div class="list-item"><span class="muted">Сумма погодных коэффициентов</span><b>−${m.wxSum}%</b></div></div>
+    <h2>Календарь</h2>
+    <div class="card">${m.calF.length ? m.calF.map(f => row(f, f.pct >= 0 ? '+' : '−')).join('') : '<div class="muted">Обычный будний день</div>'}
+      <div class="list-item"><span class="muted">Сумма календарных коэффициентов</span><b>${signed(m.calSum)}%</b></div></div>
+    <div class="card small muted">Итог = ${rub(m.plan)} × (1 − ${m.wxSum / 100}) × (1 + ${m.calSum / 100}) = <b>${rub(m.forecast)}</b></div>
+    ${m.recs.filter(r => /промо|Отстаём|Темп/.test(r.t)).map(recHTML).join('') || recHTML({ l: 'green', t: 'Прогноз в пределах плана — держи стандарт выкладки' })}`;
+};
+
+/* ----- 9.4 Факт vs План ----- */
+RENDER.fact = () => {
+  const m = calc(); const el = $('#tab-fact'); if (!m) { el.innerHTML = ''; return; }
+  const dev = m.fact - m.plan, devPct = m.plan ? dev / m.plan * 100 : 0;
+  const devNow = m.fact - m.planNow;
+  el.innerHTML = `
+    ${banners()}
+    <div class="grid2">
+      <div class="card kpi"><div class="label">Выручка</div><div class="value">${rub(m.fact)}</div><div class="sub">продажи ${rub(m.gross)} − возвраты ${rub(m.retSum)}</div></div>
+      <div class="card kpi"><div class="label">Чеков / ср. чек</div><div class="value">${m.checks}</div><div class="sub">${rub(m.avg)}</div></div>
+      <div class="card kpi ${dev >= 0 ? 'green' : 'red'}"><div class="label">Факт − План (день)</div><div class="value">${dev >= 0 ? '+' : '−'}${rub(Math.abs(dev))}</div><div class="sub">${signed(Math.round(devPct * 10) / 10)}%</div></div>
+      <div class="card kpi ${devNow >= 0 ? 'green' : m.pace >= 80 ? 'yellow' : 'red'}"><div class="label">К плану на сейчас</div><div class="value">${m.share ? (devNow >= 0 ? '+' : '−') + rub(Math.abs(devNow)) : '—'}</div><div class="sub">${m.pace != null ? 'темп ' + pct(m.pace, 0) : ''}</div></div>
+    </div>
+    <button class="btn primary full" data-act="refresh">⟳ Обновить из iiko</button>
+    <h2>Чеки за сегодня (${m.sales.length})</h2>
+    <div class="card">${m.sales.length ? `<div class="scroll-x maxh"><table>
+      <thead><tr><th>Время</th><th>№</th><th class="r">Сумма</th><th class="r">Поз.</th></tr></thead>
+      <tbody>${m.sales.slice().reverse().map(o => `<tr><td>${m.iso.slice(8, 10)}.${m.iso.slice(5, 7)} ${esc(o.time)}</td><td>${esc(o.num)}</td><td class="r">${rub(o.sum)}</td><td class="r">${o.qty}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="muted">Чеков пока нет</div>'}</div>
+    ${updatedLine()}`;
+};
+
+/* ----- 9.5 Возвраты и отмены ----- */
+RENDER.returns = () => {
+  const m = calc(); const el = $('#tab-returns'); if (!m) { el.innerHTML = ''; return; }
+  const list = [...m.rets, ...m.cancels].sort((a, b) => b.time.localeCompare(a.time));
+  const lvl = levelBy(m.retShare, 1, 3);
+  const flagged = m.items.filter(it => it.retQty > 0).sort((a, b) => b.retQty - a.retQty);
+  el.innerHTML = `
+    ${banners()}
+    <div class="grid2">
+      <div class="card kpi ${lvl}"><div class="label">Доля от выручки</div><div class="value">${pct(m.retShare)}</div><div class="sub">норма ≤ 1%</div></div>
+      <div class="card kpi"><div class="label">Сумма / кол-во</div><div class="value">${rub(m.retSum + m.canSum)}</div><div class="sub">возвратов ${m.rets.length} · отмен ${m.cancels.length}</div></div>
+    </div>
+    ${lvl === 'green' ? recHTML({ l: 'green', t: 'Возвраты в норме' }) : recHTML({ l: lvl, t: `Доля возвратов ${pct(m.retShare)} — проверь свежесть выпечки и температуру витрины` })}
+    ${flagged.length ? `<h2>По позициям</h2><div class="card">${flagged.map(it => `<div class="list-item"><span>${itemFlag(it) ? '⚠️ ' : ''}${esc(it.name)}</span><b>${it.retQty} шт · ${rub(it.retSum)}</b></div>`).join('')}
+      <div class="row"><button class="btn" data-tab="stock">Открыть «Склад и списания»</button></div></div>` : ''}
+    <h2>Журнал</h2>
+    <div class="card">${list.length ? `<div class="scroll-x maxh"><table>
+      <thead><tr><th>Время</th><th>№</th><th>Тип</th><th class="r">Сумма</th><th>Причина</th></tr></thead>
+      <tbody>${list.map(o => `<tr><td>${esc(o.time)}</td><td>${esc(o.num)}</td><td>${o.type === 'return' ? '<span class="badge yellow">возврат</span>' : '<span class="badge gray">отмена</span>'}</td><td class="r">${rub(o.sum)}</td><td>${esc(o.reason || '—')}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="muted">Возвратов и отмен сегодня нет 👍</div>'}</div>`;
+};
+
+/* ----- 9.6 Календарь и события ----- */
+RENDER.calendar = () => {
+  const v = cur(); const el = $('#tab-calendar'); if (!v) { el.innerHTML = ''; return; }
+  const month = S.calMonth ? DateTime.fromISO(S.calMonth) : DateTime.now().startOf('month');
+  const start = month.startOf('month'), days = month.daysInMonth, offset = start.weekday - 1, iso0 = todayISO();
+  let cells = WEEKDAYS.map(w => `<div class="h">${w}</div>`).join('') + '<div></div>'.repeat(offset);
+  for (let d = 1; d <= days; d++) {
+    const iso = start.set({ day: d }).toISODate(), evs = eventsFor(iso, v.id);
+    const cls = ['d', isHoliday(iso) ? 'hol' : isWeekend(iso) ? 'we' : '', iso === iso0 ? 'today' : ''].join(' ');
+    cells += `<div class="${cls}" data-act="calPick" data-date="${iso}">${d}<div class="m">${evs.slice(0, 3).map(e => `<i class="${e.type === 'closure' ? 'closure' : ''}"></i>`).join('')}</div></div>`;
+  }
+  const monthEvents = S.events.filter(e => e.date.startsWith(month.toFormat('yyyy-MM')) && (e.venueId === 'all' || e.venueId === v.id)).sort((a, b) => a.date.localeCompare(b.date));
+  const monthHol = S.settings.holidays.filter(h => h.startsWith(month.toFormat('yyyy-MM')));
+  el.innerHTML = `
+    <div class="between"><button class="icon-btn" data-act="calPrev">‹</button><b style="font-size:18px;text-transform:capitalize">${month.setLocale('ru').toFormat('LLLL yyyy')}</b><button class="icon-btn" data-act="calNext">›</button></div>
+    <div class="card" style="margin-top:10px"><div class="cal">${cells}</div>
+      <div class="muted small" style="margin-top:8px"><span class="badge red">праздник</span> <span class="badge gray">выходной</span> <span class="badge blue">● событие</span></div></div>
+    <h2>События месяца</h2>
+    <div class="card">
+      ${monthHol.map(h => `<div class="list-item"><span>${DateTime.fromISO(h).toFormat('dd.MM')} · Праздничный день (РФ)</span><b>+${S.settings.coefs.holiday}%</b></div>`).join('')}
+      ${monthEvents.map(e => `<div class="list-item"><span>${DateTime.fromISO(e.date).toFormat('dd.MM')} · <b>${esc(e.title)}</b><br><span class="muted small">${EVENT_TYPES[e.type]}${e.venueId === 'all' ? ' · все точки' : ''}${e.comment ? ' · ' + esc(e.comment) : ''}</span></span>
+        <span><b>${signed(+e.coef)}%</b><button class="x" data-act="evDel" data-id="${e.id}">✕</button></span></div>`).join('')}
+      ${!monthHol.length && !monthEvents.length ? '<div class="muted">Событий нет</div>' : ''}
+    </div>
+    <h2>Добавить событие</h2>
+    <div class="card">
+      <div class="fgrid">
+        <div><label>Дата</label><input type="date" id="ev_date" value="${S.calPick || iso0}"></div>
+        <div><label>Тип</label><select id="ev_type">${Object.entries(EVENT_TYPES).map(([k, t]) => `<option value="${k}" ${k === 'event' ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      </div>
+      <label>Название</label><input id="ev_title" placeholder="День города, концерт в парке…">
+      <div class="fgrid">
+        <div><label>Коэффициент, % (пусто = по типу)</label><input id="ev_coef" inputmode="decimal" placeholder="${S.settings.coefs.event}"></div>
+        <div><label>Для точек</label><select id="ev_scope"><option value="${v.id}">Только эта</option><option value="all">Все точки</option></select></div>
+      </div>
+      <label>Комментарий</label><input id="ev_comment" placeholder="Перекрыта улица до 18:00">
+      <div class="row"><button class="btn primary" data-act="evAdd">Добавить событие</button></div>
+    </div>`;
+};
+
+/* ----- 9.7 Отзывы и оценки ----- */
+RENDER.reviews = () => {
+  const v = cur(); const el = $('#tab-reviews'); if (!v) { el.innerHTML = ''; return; }
+  const R = S.reviews[v.id] || { ratings: {}, comments: [] };
+  const dateSel = S.rateDate || todayISO();
+  const curVal = R.ratings[dateSel] || 0;
+  const info = ratingInfo(v.id);
+  const comments = (R.comments || []).slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  el.innerHTML = `
+    <h2>Рейтинг точки</h2>
+    <div class="card">
+      <label>Дата</label><input type="date" id="rate_date" value="${dateSel}">
+      <label>Оценка (среднее по Яндекс/2ГИС/гостям)</label>
+      <div class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${n <= Math.round(curVal) ? 'on' : ''}" data-act="rate" data-v="${n}">★</button>`).join('')}</div>
+      <div class="fgrid"><div><label>Или точно (напр. 4,7)</label><input id="rate_exact" inputmode="decimal" value="${curVal ? num(curVal) : ''}"></div>
+      <div><label>&nbsp;</label><button class="btn full" data-act="rateExact">Сохранить</button></div></div>
+    </div>
+    ${info ? `<div class="card kpi ${info.level}"><div class="label">Последний рейтинг · ${DateTime.fromISO(info.date).toFormat('dd.MM')}</div>
+      <div class="value">${num(info.value)} ${info.prevAvg != null ? `<span class="small">(${signed(Math.round(info.delta * 10) / 10)} к среднему за 7 дней)</span>` : ''}</div></div>
+      ${info.level === 'green' ? recHTML({ l: 'green', t: 'Рейтинг стабилен' }) : recHTML({ l: info.level, t: `Рейтинг ${num(info.value)} (${signed(Math.round(info.delta * 10) / 10)}) — проверь чистоту зала и скорость обслуживания` })}` : ''}
+    <h2>Динамика за 7 дней</h2>
+    <div class="card"><div class="chartbox" style="height:200px"><canvas id="rateChart"></canvas></div></div>
+    <h2>Комментарии дня</h2>
+    <div class="card">
+      ${comments.map(c => `<div class="list-item"><span>${c.rating ? '★'.repeat(c.rating) + ' ' : ''}${esc(c.text)}<br><span class="muted small">${DateTime.fromISO(c.date).toFormat('dd.MM.yyyy')}</span></span><button class="x" data-act="comDel" data-id="${c.id}">✕</button></div>`).join('') || '<div class="muted">Отзывов пока нет</div>'}
+    </div>
+    <div class="card">
+      <label>Новый отзыв</label><textarea id="com_text" placeholder="Текст отзыва"></textarea>
+      <div class="fgrid">
+        <div><label>Дата</label><input type="date" id="com_date" value="${todayISO()}"></div>
+        <div><label>Оценка</label><select id="com_rating"><option value="">—</option>${[5, 4, 3, 2, 1].map(n => `<option>${n}</option>`).join('')}</select></div>
+      </div>
+      <div class="row"><button class="btn primary" data-act="comAdd">Добавить отзыв</button></div>
+    </div>`;
+  // График рейтинга
+  const labels = [], data = [];
+  for (let i = 6; i >= 0; i--) { const d = DateTime.now().minus({ days: i }); labels.push(d.toFormat('dd.MM')); data.push(R.ratings[d.toISODate()] ?? null); }
+  drawChart('rateChart', { type: 'line', data: { labels, datasets: [{ label: 'Рейтинг', data, borderColor: '#f59e0b', backgroundColor: '#f59e0b', spanGaps: true, tension: .3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 1, max: 5 } } } });
+};
+
+/* ----- 9.8 Склад и списания ----- */
+RENDER.stock = () => {
+  const m = calc(); const el = $('#tab-stock'); if (!m) { el.innerHTML = ''; return; }
+  const L = S.settings.limits;
+  const wo = (S.writeoffs[m.v.id] || {})[m.iso] || [];
+  const woSum = sum(wo, 'sum'), woShare = m.fact ? woSum / m.fact * 100 : 0;
+  const woLvl = levelBy(woShare, L.writeoffYellow, L.writeoffRed);
+  const names = [...new Set([...DEMO_ITEMS.map(i => i.name), ...m.items.map(i => i.name), ...wo.map(w => w.item)])];
+  const rows = names.map(n => {
+    const it = m.items.find(i => i.name === n) || { name: n, qty: 0, retQty: 0 };
+    const w = wo.filter(x => x.item === n);
+    return { ...it, woQty: sum(w, 'qty'), woSum: sum(w, 'sum'), flag: itemFlag(it) };
+  }).sort((a, b) => (b.flag ? 1 : 0) - (a.flag ? 1 : 0) || b.qty - a.qty);
+  el.innerHTML = `
+    ${banners()}
+    <div class="grid2">
+      <div class="card kpi ${woLvl}"><div class="label">Списания сегодня</div><div class="value">${rub(woSum)}</div><div class="sub">${pct(woShare)} от выручки</div></div>
+      <div class="card kpi ${rows.some(r => r.flag) ? 'yellow' : 'green'}"><div class="label">Позиций с риском</div><div class="value">${rows.filter(r => r.flag).length}</div><div class="sub">по возвратам</div></div>
+    </div>
+    ${rows.filter(r => r.flag).map(r => recHTML({ l: r.flag, t: `«${r.name}»: ${r.retQty} возвр. — проверь партию, срок годности и температуру хранения` })).join('')}
+    ${woLvl !== 'green' ? recHTML({ l: woLvl, t: `Списания ${pct(woShare)} — уменьши выпечку на вечер и введи скидку за 2 часа до закрытия` }) : ''}
+    <div class="card scroll-x"><table>
+      <thead><tr><th>Позиция</th><th class="r">Продано</th><th class="r">Возвр.</th><th class="r">Списано</th></tr></thead>
+      <tbody>${rows.map(r => `<tr class="${r.flag ? 'hl-' + r.flag : ''}"><td>${r.flag ? '⚠️ ' : ''}${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">${r.retQty}</td><td class="r">${r.woQty ? r.woQty + ' · ' + rub(r.woSum) : '—'}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <h2>Добавить списание</h2>
+    <div class="card">
+      <label>Позиция</label><input id="wo_item" list="wo_items" placeholder="Круассан"><datalist id="wo_items">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+      <div class="fgrid">
+        <div><label>Кол-во, шт</label><input id="wo_qty" inputmode="decimal"></div>
+        <div><label>Сумма, ₽</label><input id="wo_sum" inputmode="decimal"></div>
+      </div>
+      <label>Причина</label><select id="wo_reason"><option>Истёк срок</option><option>Брак</option><option>Порча при хранении</option><option>Дегустация</option><option>Другое</option></select>
+      <div class="row"><button class="btn primary" data-act="woAdd">Добавить</button></div>
+      ${wo.map(w => `<div class="list-item"><span>${esc(w.item)} · ${w.qty} шт · ${esc(w.reason)}</span><span><b>${rub(w.sum)}</b><button class="x" data-act="woDel" data-id="${w.id}">✕</button></span></div>`).join('')}
+    </div>`;
+};
+
+/* ----- 9.9 Смены ----- */
+RENDER.shifts = () => {
+  const m = calc(); const el = $('#tab-shifts'); if (!m) { el.innerHTML = ''; return; }
+  const L = S.settings.limits;
+  const staff = (S.staff[m.v.id] || {})[m.iso] || [];
+  const hrs = s => { const [a, b] = [s.from, s.to].map(t => { const [h, mm] = t.split(':').map(Number); return h + (mm || 0) / 60; }); return Math.max(0, b - a); };
+  const totalH = staff.reduce((s, x) => s + hrs(x), 0);
+  const perH = totalH ? m.plan / totalH : 0;
+  const lvl = !totalH ? '' : perH > L.staffHourHigh ? 'yellow' : perH < L.staffHourLow ? 'yellow' : 'green';
+  const shifts = S.day?.shifts || [];
+  el.innerHTML = `
+    ${banners()}
+    <div class="grid2">
+      <div class="card kpi"><div class="label">Сотрудников / часов</div><div class="value">${staff.length} / ${num(totalH)}</div></div>
+      <div class="card kpi ${lvl}"><div class="label">План на чел.-час</div><div class="value">${totalH ? rub(perH) : '—'}</div><div class="sub">норма ${rub(L.staffHourLow)}–${rub(L.staffHourHigh)}</div></div>
+    </div>
+    ${totalH && perH > L.staffHourHigh ? recHTML({ l: 'yellow', t: 'Мало людей под план — риск очередей, добавь бариста в утренний пик' }) : ''}
+    ${totalH && perH < L.staffHourLow ? recHTML({ l: 'yellow', t: 'Людей больше, чем нужно под план — сократи вечернюю смену' }) : ''}
+    <h2>Кассовые смены (iiko)</h2>
+    <div class="card">${shifts.length ? shifts.map(s => `<div class="list-item"><span>Смена №${esc(s.num)} · ${esc(s.cashier)}<br><span class="muted small">открыта ${esc(String(s.open).replace('T', ' ').slice(0, 16))}${s.close ? ' · закрыта ' + esc(String(s.close).replace('T', ' ').slice(11, 16)) : ' · открыта сейчас'}</span></span><b>${s.sum != null ? rub(s.sum) : ''}</b></div>`).join('') : '<div class="muted">Нет данных о сменах</div>'}</div>
+    <h2>График персонала на сегодня</h2>
+    <div class="card">
+      ${staff.map(s => `<div class="list-item"><span>${esc(s.name)} · ${esc(s.role)}</span><span><b>${esc(s.from)}–${esc(s.to)}</b><button class="x" data-act="stDel" data-id="${s.id}">✕</button></span></div>`).join('') || '<div class="muted">Никого не добавлено</div>'}
+      <label>Имя</label><input id="st_name">
+      <div class="fgrid">
+        <div><label>Роль</label><select id="st_role"><option>Бариста</option><option>Пекарь</option><option>Кассир</option><option>Управляющий</option><option>Уборка</option></select></div>
+        <div></div>
+        <div><label>С</label><input type="time" id="st_from" value="${String(m.v.open).padStart(2, '0')}:00"></div>
+        <div><label>До</label><input type="time" id="st_to" value="${String(Math.min(m.v.open + 12, 23)).padStart(2, '0')}:00"></div>
+      </div>
+      <div class="row"><button class="btn primary" data-act="stAdd">Добавить</button><button class="btn" data-act="stCopy">Как вчера</button></div>
+    </div>`;
+};
+
+/* ----- 9.10 График План / Прогноз / Факт ----- */
+RENDER.chart = () => {
+  const m = calc(); const el = $('#tab-chart'); if (!m) { el.innerHTML = ''; return; }
+  const labels = [], plan = [], fc = [], fact = [];
+  const hist = Object.fromEntries((S.day?.history || []).map(h => [h.date, h.sum]));
+  for (let i = 6; i >= 0; i--) {
+    const iso = DateTime.fromISO(m.iso).minus({ days: i }).toISODate();
+    const p = planFor(m.v, iso), snap = S.snaps[m.v.id]?.[iso];
+    labels.push(DateTime.fromISO(iso).toFormat('dd.MM'));
+    plan.push(p);
+    // если прогноз в тот день не сохранялся — считаем только по календарю
+    fc.push(snap ? snap.forecast : Math.round(p * (1 + sumPct(calendarFactors(iso, m.v.id)) / 100)));
+    fact.push(i === 0 ? Math.round(m.fact) : (hist[iso] ?? null));
+  }
+  const enough = fact.filter(x => x != null && x > 0).length >= 2;
+  el.innerHTML = `${banners()}<h2>Выручка за 7 дней</h2>
+    <div class="card">${enough ? '<div class="chartbox"><canvas id="mainChart"></canvas></div>' : '<div class="placeholder">Недостаточно данных для графика</div>'}</div>
+    <div class="muted small">Факт за сегодня — на текущий момент. Прогноз с погодой сохраняется, когда вы открываете дашборд в течение дня.</div>`;
+  if (!enough) return;
+  drawChart('mainChart', {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'План', data: plan, borderColor: '#a8a29e', borderDash: [6, 4], pointRadius: 2, tension: .2 },
+      { label: 'Прогноз', data: fc, borderColor: '#3b82f6', pointRadius: 3, tension: .2 },
+      { label: 'Факт', data: fact, borderColor: '#16a34a', backgroundColor: '#16a34a', pointRadius: 4, borderWidth: 3, tension: .2 }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${rub(c.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: v => NF.format(v / 1000) + 'к' } } } }
+  });
+};
+function drawChart(id, cfg) {
+  if (!window.Chart) { const c = document.getElementById(id); if (c) c.parentElement.innerHTML = '<div class="placeholder">Графики недоступны без интернета</div>'; return; }
+  if (S.charts[id]) S.charts[id].destroy();
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  Chart.defaults.color = dark ? '#a8a29e' : '#78716c';
+  Chart.defaults.borderColor = dark ? '#292524' : '#e7e5e4';
+  S.charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+/* ----- 9.11 Анализ отклонений ----- */
+RENDER.analysis = () => {
+  const m = calc(); const el = $('#tab-analysis'); if (!m) { el.innerHTML = ''; return; }
+  const L = S.settings.limits;
+  // Время: утро / день / вечер
+  const seg = { 'Утро': [m.v.open, 11], 'День': [11, 16], 'Вечер': [16, m.v.close] };
+  const totalW = (() => { let t = 0; for (let h = m.v.open; h < m.v.close; h++) t += hourWeight(h); return t; })();
+  const segs = Object.entries(seg).map(([name, [a, b]]) => {
+    let w = 0; for (let h = a; h < b; h++) w += hourWeight(h);
+    const s = sum(m.sales.filter(o => o.hour >= a && o.hour < b), 'sum');
+    return { name, sum: s, share: m.gross ? s / m.gross * 100 : 0, expected: w / totalW * 100 };
+  });
+  const elapsed = m.share >= 0.99;
+  const weak = elapsed ? segs.filter(s => s.share < s.expected * 0.85).sort((a, b) => a.share / a.expected - b.share / b.expected)[0] : null;
+  const weakRec = { 'Утро': 'Утро проседает — проверь, что выпечка готова к открытию', 'День': 'Днём мало продаж — запусти обеденное комбо «сэндвич + кофе»', 'Вечер': 'Вечер слабый — скидка на выпечку за 2 часа до закрытия' };
+  const topSum = m.items.slice().sort((a, b) => b.sum - a.sum).slice(0, 3);
+  const topQty = m.items.slice().sort((a, b) => b.qty - a.qty).slice(0, 3);
+  const evPos = m.calF.filter(f => f.pct > 0), evNeg = m.calF.filter(f => f.pct < 0);
+  const rows = [
+    { f: '🌧 Погода', lvl: !m.wx ? '' : m.wxSum === 0 ? 'green' : m.wxSum <= 10 ? 'yellow' : 'red',
+      d: m.wx ? `${m.wx.temp}°C, осадки ${m.wx.precip} мм, ветер ${m.wx.wind} м/с → −${m.wxSum}%` : esc(S.wx?.error || 'нет данных'),
+      r: !m.wx ? 'Подключи погоду в настройках' : m.wxSum ? (m.wx.precip >= L.rainMidMm ? 'Дождь: акция «кофе с собой» и зонт-стойка у входа' : m.wx.temp < 0 ? 'Холодно: горячие напитки и выпечка из печи на виду' : 'Ветер: убери штендер, продвигай доставку') : 'Погода не мешает — работаем по стандарту' },
+    { f: '📅 Календарь', lvl: evNeg.length ? 'yellow' : 'green',
+      d: m.calF.length ? m.calF.map(x => `${esc(x.label)} (${signed(x.pct)}%)`).join(', ') : 'обычный будний день',
+      r: evNeg.length ? 'Перекрытие: предупреди гостей в соцсетях, усиль доставку' : evPos.length ? 'Событие: увеличь выпечку и выведи второго бариста' : 'Без событий: работай с постоянными гостями (карта лояльности)' },
+    { f: '↩️ Возвраты', lvl: levelBy(m.retShare, 1, 3),
+      d: `${pct(m.retShare)} от выручки, ${m.rets.length + m.cancels.length} шт на ${rub(m.retSum + m.canSum)}`,
+      r: m.retShare > 1 ? `Доля возвратов ${pct(m.retShare)} — проверь свежесть выпечки и температуру витрины` : 'Возвраты в норме' },
+    { f: '🥐 Ассортимент', lvl: m.items.some(itemFlag) ? 'yellow' : 'green',
+      d: topSum.length ? `По выручке: ${topSum.map(i => `${esc(i.name)} ${rub(i.sum)}`).join(', ')}<br>По количеству: ${topQty.map(i => `${esc(i.name)} ${i.qty} шт`).join(', ')}` : 'нет продаж',
+      r: topSum.length ? `Держи «${topSum[0].name}» всегда на витрине; к «${topQty[0].name}» предлагай пару` : '—' },
+    { f: '🕐 Время', lvl: weak ? 'yellow' : 'green',
+      d: segs.map(s => `${s.name}: ${rub(s.sum)} (${pct(s.share, 0)}, норма ~${pct(s.expected, 0)})`).join('<br>'),
+      r: weak ? weakRec[weak.name] : elapsed ? 'Распределение по времени в норме' : 'Оценка по времени — после закрытия' }
+  ];
+  const dev = m.fact - m.plan;
+  el.innerHTML = `
+    ${banners()}
+    <div class="card kpi ${m.status}"><div class="label">Факт − План</div><div class="value">${dev >= 0 ? '+' : '−'}${rub(Math.abs(dev))}</div><div class="sub">выполнение ${pct(m.pctFull, 0)}${m.pace != null && m.share < 1 ? ', темп ' + pct(m.pace, 0) : ''} · прогноз ${rub(m.forecast)}</div></div>
+    <h2>Почему не выполнили план</h2>
+    ${rows.map(r => `<div class="card"><div class="between"><b>${r.f}</b>${r.lvl ? `<span class="badge ${r.lvl}"><span class="dot"></span>${STATUS[r.lvl]}</span>` : ''}</div>
+      <div class="small" style="margin-top:6px">${r.d}</div>${recHTML({ l: r.lvl || 'blue', t: r.r })}</div>`).join('')}
+    ${m.recs.length ? '<h2>Все рекомендации дня</h2>' + m.recs.map(recHTML).join('') : ''}`;
+};
+
+/* =====================================================================
+   10. НАВИГАЦИЯ, ЗАГРУЗКА, ОБРАБОТЧИКИ
+   ===================================================================== */
+function renderHeader() {
+  const v = cur();
+  $('#hTitle').textContent = v ? v.name : 'Пульс пекарни';
+  const city = v?.city || S.wx?.wx?.city || '';
+  $('#hSub').textContent = v ? `${city ? city + ' · ' : ''}${DateTime.now().setLocale('ru').toFormat('cccc, d MMMM')}` : 'Добавьте заведение';
+}
+function render() {
+  renderHeader();
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + S.tab));
+  document.querySelectorAll('nav.bottom button[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === S.tab));
+  try { (RENDER[S.tab] || RENDER.summary)(); }
+  catch (e) { console.error(e); $('#tab-' + S.tab).innerHTML = `<div class="banner err">Ошибка отображения: ${esc(e.message)}</div>`; }
+}
+function showTab(t) { S.tab = t; LS.set('bk_tab', t); closeMenu(); render(); window.scrollTo(0, 0); }
+function closeMenu() { $('#sheet').classList.remove('open'); $('#sheetBg').style.display = 'none'; }
+
+async function loadAll(force) {
+  const v = cur(); if (!v) { render(); return; }
+  if (S.loading) return;
+  S.loading = true; $('#refreshIcon').classList.add('spin');
+  const stamp = () => `${S.day?.fetchedAt}|${S.day?.error}|${S.wx?.t}|${S.wx?.error}`;
+  const before = S.day ? stamp() : 'none';
+  try {
+    const [day, wx] = await Promise.all([loadDay(v, force), loadWeather(v, force)]);
+    if (cur()?.id === v.id) { S.day = day; S.wx = wx; }
+    if (force) toast(day.error ? 'Ошибка обновления — см. сообщение' : 'Данные обновлены');
+  } finally {
+    S.loading = false; $('#refreshIcon').classList.remove('spin');
+  }
+  // перерисовываем только при новых данных и не трогаем открытую форму заведения
+  const changed = force || before !== stamp();
+  if (changed && !(S.tab === 'settings' && S.editing)) render(); else renderHeader();
+}
+
+// Все кнопки работают через data-act (делегирование событий)
+const ACT = {
+  refresh: () => loadAll(true),
+  menu: () => { $('#sheet').classList.add('open'); $('#sheetBg').style.display = 'block'; },
+  menuClose: closeMenu,
+
+  // --- заведения ---
+  venueAdd: () => { S.editing = { demo: false, open: 8, close: 22 }; render(); },
+  venueEdit: () => { S.editing = { ...cur() }; render(); },
+  venueCancel: () => { S.editing = null; render(); },
+  venueDel: () => {
+    const v = cur(); if (!v || !confirm(`Удалить «${v.name}»?`)) return;
+    S.venues = S.venues.filter(x => x.id !== v.id); persist('venues');
+    S.selected = S.venues[0]?.id || null; persist('selected'); S.day = null; S.wx = null; loadAll(false);
+  },
+  venueSave: () => {
+    const v = readVenueForm(), demo = v.demo;
+    if (!v.name) return toast('Укажите название');
+    if (!demo && !/^https?:\/\//i.test(v.apiUrl)) return toast('Адрес iiko должен начинаться с https://');
+    if (!demo && (!v.login || !v.passHash)) return toast('Укажите логин и пароль iiko');
+    if ((v.lat != null && Math.abs(v.lat) > 90) || (v.lon != null && Math.abs(v.lon) > 180)) return toast('Проверьте координаты');
+    if (!(v.open >= 0 && v.close <= 24 && v.open < v.close)) return toast('Проверьте часы работы');
+    if (v.lat == null || v.lon == null) toast('Без координат погода не учитывается');
+    const i = S.venues.findIndex(x => x.id === v.id);
+    if (i >= 0) S.venues[i] = v; else S.venues.push(v);
+    persist('venues'); S.selected = v.id; persist('selected');
+    LS.del(`bk_cache_iiko_${v.id}_${todayISO()}`);
+    S.editing = null; S.day = null; S.wx = null; toast('Заведение сохранено');
+    render(); loadAll(true);
+  },
+
+  // --- поиск торговых предприятий (depotId) на сервере iiko ---
+  deptFind: async () => {
+    const f = readVenueForm();
+    if (!f.apiUrl || !f.login || !f.passHash) return toast('Укажите адрес, логин и пароль iiko');
+    const box = document.getElementById('deptList');
+    box.innerHTML = '<div class="muted small" style="margin-top:8px">Подключаюсь к iiko…</div>';
+    try { S.depts = await iikoDepartments(f); }
+    catch (e) { S.depts = null; box.innerHTML = `<div class="banner err" style="margin-top:8px">${esc(e.message)}</div>`; return; }
+    box.innerHTML = deptListHTML();
+  },
+  deptPick: a => {
+    document.getElementById('vf_depot').value = a.dataset.id;
+    const n = document.getElementById('vf_name'); if (!n.value.trim()) n.value = a.dataset.name;
+    toast('depotId подставлен — нажмите «Сохранить»');
+  },
+  deptAddAll: () => {
+    const base = readVenueForm();
+    if (!base.passHash) return toast('Укажите пароль iiko');
+    S.depts.forEach(d => {
+      const v = { ...base, id: 'v' + hashStr(base.apiUrl + d.id).toString(36), name: d.name, depotId: d.id };
+      const i = S.venues.findIndex(x => x.id === v.id);
+      if (i >= 0) S.venues[i] = v; else S.venues.push(v);
+    });
+    // исходная запись без depotId больше не нужна
+    if (S.editing.id && !base.depotId) S.venues = S.venues.filter(x => x.id !== S.editing.id);
+    persist('venues'); S.selected = S.venues[S.venues.length - 1].id; persist('selected');
+    toast(`Добавлено точек: ${S.depts.length}`);
+    S.editing = null; S.depts = null; S.day = null; render(); loadAll(true);
+  },
+
+  // --- общие настройки ---
+  settingsSave: () => {
+    const s = S.settings;
+    s.owmKey = val('s_owm');
+    Object.keys(s.coefs).forEach(k => { const n = toNum(val('c_' + k)); if (n != null) s.coefs[k] = n; });
+    Object.keys(s.limits).forEach(k => { const n = toNum(val('l_' + k)); if (n != null) s.limits[k] = n; });
+    s.holidays = [...new Set(val('s_holidays').split(/\s+/).filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+    persist('settings'); toast('Настройки сохранены'); render(); loadAll(false);
+  },
+  backupExport: () => {
+    const data = { v: 1, venues: S.venues, selected: S.selected, settings: S.settings, events: S.events, reviews: S.reviews, writeoffs: S.writeoffs, staff: S.staff };
+    const t = document.getElementById('backupText'); t.value = JSON.stringify(data); t.select();
+    navigator.clipboard?.writeText(t.value).then(() => toast('Скопировано в буфер обмена'), () => toast('Выделите текст и скопируйте вручную'));
+  },
+  backupImport: () => {
+    try {
+      const d = JSON.parse(val('backupText'));
+      if (!Array.isArray(d.venues)) throw new Error();
+      ['venues', 'selected', 'events', 'reviews', 'writeoffs', 'staff'].forEach(k => { if (d[k] !== undefined) { S[k] = d[k]; persist(k); } });
+      if (d.settings) { LS.set('bk_settings', d.settings); S.settings = loadSettings(); }
+      toast('Импортировано'); S.day = null; loadAll(true);
+    } catch (e) { toast('Неверный формат данных'); }
+  },
+  cacheClear: () => { Object.keys(localStorage).filter(k => k.startsWith('bk_cache_')).forEach(k => localStorage.removeItem(k)); toast('Кэш очищен'); loadAll(true); },
+
+  // --- календарь ---
+  calPrev: () => { S.calMonth = (S.calMonth ? DateTime.fromISO(S.calMonth) : DateTime.now().startOf('month')).minus({ months: 1 }).toISODate(); render(); },
+  calNext: () => { S.calMonth = (S.calMonth ? DateTime.fromISO(S.calMonth) : DateTime.now().startOf('month')).plus({ months: 1 }).toISODate(); render(); },
+  calPick: a => { S.calPick = a.dataset.date; const i = document.getElementById('ev_date'); if (i) { i.value = a.dataset.date; document.getElementById('ev_title').focus(); } },
+  evAdd: () => {
+    const type = val('ev_type'), title = val('ev_title'), date = val('ev_date');
+    if (!date || !title) return toast('Укажите дату и название');
+    const byType = { holiday: S.settings.coefs.holiday, weekend: S.settings.coefs.weekend, event: S.settings.coefs.event, closure: S.settings.coefs.closure }[type];
+    const coef = toNum(val('ev_coef'));
+    S.events.push({ id: uid(), date, title, type, coef: coef ?? byType, comment: val('ev_comment'), venueId: val('ev_scope') });
+    persist('events'); toast('Событие добавлено'); render();
+  },
+  evDel: a => { S.events = S.events.filter(e => e.id !== a.dataset.id); persist('events'); render(); },
+
+  // --- отзывы ---
+  rate: a => setRating(+a.dataset.v),
+  rateExact: () => { const n = toNum(val('rate_exact')); if (n == null || n < 1 || n > 5) return toast('Рейтинг от 1 до 5'); setRating(Math.round(n * 10) / 10); },
+  comAdd: () => {
+    const text = val('com_text'); if (!text) return toast('Введите текст отзыва');
+    const R = reviewsOf(cur().id);
+    R.comments.push({ id: uid(), date: val('com_date') || todayISO(), text, rating: +val('com_rating') || null });
+    persist('reviews'); toast('Отзыв добавлен'); render();
+  },
+  comDel: a => { const R = reviewsOf(cur().id); R.comments = R.comments.filter(c => c.id !== a.dataset.id); persist('reviews'); render(); },
+
+  // --- списания ---
+  woAdd: () => {
+    const item = val('wo_item'), qty = toNum(val('wo_qty')), s = toNum(val('wo_sum'));
+    if (!item || !qty) return toast('Укажите позицию и количество');
+    const price = DEMO_ITEMS.find(i => i.name === item)?.price || 0;
+    const v = cur(); S.writeoffs[v.id] = S.writeoffs[v.id] || {};
+    (S.writeoffs[v.id][todayISO()] = S.writeoffs[v.id][todayISO()] || []).push({ id: uid(), item, qty, sum: s ?? qty * price, reason: val('wo_reason') });
+    persist('writeoffs'); render();
+  },
+  woDel: a => { const v = cur(), d = todayISO(); S.writeoffs[v.id][d] = S.writeoffs[v.id][d].filter(w => w.id !== a.dataset.id); persist('writeoffs'); render(); },
+
+  // --- персонал ---
+  stAdd: () => {
+    const name = val('st_name'), from = val('st_from'), to = val('st_to');
+    if (!name || !from || !to || from >= to) return toast('Укажите имя и корректное время');
+    const v = cur(); S.staff[v.id] = S.staff[v.id] || {};
+    (S.staff[v.id][todayISO()] = S.staff[v.id][todayISO()] || []).push({ id: uid(), name, role: val('st_role'), from, to });
+    persist('staff'); render();
+  },
+  stDel: a => { const v = cur(), d = todayISO(); S.staff[v.id][d] = S.staff[v.id][d].filter(s => s.id !== a.dataset.id); persist('staff'); render(); },
+  stCopy: () => {
+    const v = cur(), y = DateTime.now().minus({ days: 1 }).toISODate(), list = S.staff[v.id]?.[y];
+    if (!list?.length) return toast('Вчера график не заполнялся');
+    S.staff[v.id][todayISO()] = list.map(s => ({ ...s, id: uid() })); persist('staff'); render();
+  }
+};
+// Читаем форму заведения; пароль сразу превращаем в SHA-1 (сам пароль не храним)
+function readVenueForm() {
+  const e = S.editing || {};
+  const v = {
+    ...e, id: e.id || 'v' + Date.now().toString(36), name: val('vf_name'), city: val('vf_city'),
+    demo: document.getElementById('vf_demo').checked,
+    apiUrl: val('vf_api'), login: val('vf_login'), depotId: val('vf_depot'), proxy: val('vf_proxy'),
+    lat: toNum(val('vf_lat')), lon: toNum(val('vf_lon')),
+    open: Math.round(toNum(val('vf_open')) ?? 8), close: Math.round(toNum(val('vf_close')) ?? 22),
+    plan: WEEKDAYS.map((_, i) => toNum(val('vf_plan' + i)) || 0)
+  };
+  const pass = document.getElementById('vf_pass').value;
+  if (pass) v.passHash = sha1(pass);
+  return v;
+}
+function reviewsOf(vid) { const R = S.reviews[vid] = S.reviews[vid] || { ratings: {}, comments: [] }; R.comments = R.comments || []; R.ratings = R.ratings || {}; return R; }
+function setRating(n) {
+  const R = reviewsOf(cur().id); const d = val('rate_date') || todayISO();
+  S.rateDate = d; R.ratings[d] = n; persist('reviews'); toast(`Рейтинг ${num(n)} сохранён`); render();
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]'); if (t) { showTab(t.dataset.tab); return; }
+  const a = e.target.closest('[data-act]'); if (a && ACT[a.dataset.act]) ACT[a.dataset.act](a, e);
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'venueSelect') { S.selected = e.target.value; persist('selected'); S.day = null; S.wx = null; S.editing = null; loadAll(false); }
+  if (e.target.id === 'rate_date') { S.rateDate = e.target.value; render(); }
+});
+
+/* =====================================================================
+   11. PWA: иконка и манифест генерируются на лету (всё в одном файле)
+   ===================================================================== */
+(function pwa() {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180; const g = c.getContext('2d');
+    g.fillStyle = '#b45309'; g.fillRect(0, 0, 180, 180);
+    g.font = '110px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🥐', 90, 100);
+    const png = c.toDataURL('image/png');
+    const icon = document.createElement('link'); icon.rel = 'apple-touch-icon'; icon.href = png; document.head.appendChild(icon);
+    const man = { name: 'Пульс пекарни', short_name: 'Пекарня', start_url: location.href.split('#')[0], display: 'standalone',
+      background_color: '#1c1917', theme_color: '#1c1917', icons: [{ src: png, sizes: '180x180', type: 'image/png' }] };
+    const l = document.createElement('link'); l.rel = 'manifest';
+    l.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(man)); document.head.appendChild(l);
+  } catch (e) {}
+})();
+
+/* =====================================================================
+   12. ПЕРВЫЙ ЗАПУСК: демо-точка, события и отзывы, чтобы сразу всё увидеть
+   ===================================================================== */
+function seed() {
+  if (LS.get('bk_seeded', false)) return;
+  const id = 'demo1', t = DateTime.now();
+  if (!S.venues.length) {
+    S.venues.push({ id, name: 'Пекарня «Колос» (демо)', city: 'Москва', demo: true, apiUrl: '', login: '', depotId: '',
+      lat: 55.7558, lon: 37.6173, open: 8, close: 22, proxy: '', plan: [60000, 60000, 62000, 62000, 70000, 85000, 80000] });
+    S.selected = id; persist('venues'); persist('selected');
+  }
+  if (!S.events.length) {
+    S.events.push({ id: uid(), date: t.toISODate(), title: 'Концерт в парке рядом', type: 'event', coef: 7, comment: 'с 17:00', venueId: id });
+    S.events.push({ id: uid(), date: t.plus({ days: 3 }).toISODate(), title: 'Ремонт тротуара', type: 'closure', coef: -10, comment: 'вход со двора', venueId: id });
+    persist('events');
+  }
+  const R = reviewsOf(id);
+  [4.6, 4.7, 4.5, 4.6, 4.4, 4.6].forEach((r, i) => { R.ratings[t.minus({ days: 6 - i }).toISODate()] = r; });
+  R.comments.push(
+    { id: uid(), date: t.minus({ days: 1 }).toISODate(), text: 'Круассаны отличные, но очередь утром 10 минут', rating: 4 },
+    { id: uid(), date: t.minus({ days: 2 }).toISODate(), text: 'Вкусный латте, приветливый бариста', rating: 5 },
+    { id: uid(), date: t.minus({ days: 3 }).toISODate(), text: 'Сэндвич был холодный внутри', rating: 3 });
+  persist('reviews');
+  LS.set('bk_seeded', true);
+}
+
+// Точки сети (серверы из iikoOffice). Пароли сюда НЕ пишем — их вводят в «Настройках».
+const PRESET_VENUES = [
+  { id: 'bochok', name: 'ИП Бочок И.М.', apiUrl: 'https://hleb-ru-f-ip-bochok-i-m.iiko.it:443', login: 'bochok' },
+  { id: 'hotkina', name: 'ИП Хоткина Е.Ю.', apiUrl: 'https://hleb-ru-f-ip-hotkina-e-y.iiko.it:443', login: 'Kucmichev' },
+  { id: 'petrova', name: 'ИП Петрова Г.А.', apiUrl: 'https://hleb-ru-f-ip-petrova-g-a.iiko.it:443', login: 'Kucmichev' }
+];
+function seedPresets() {
+  if (LS.get('bk_seeded_presets', false)) return;
+  PRESET_VENUES.forEach(p => {
+    if (S.venues.some(v => v.id === p.id)) return;
+    S.venues.push({ ...p, city: '', demo: false, passHash: '', depotId: '', proxy: '', lat: null, lon: null,
+      open: 8, close: 22, plan: [60000, 60000, 62000, 62000, 70000, 85000, 80000] });
+  });
+  S.selected = PRESET_VENUES[0].id;
+  persist('venues'); persist('selected'); LS.set('bk_seeded_presets', true);
+}
+
+// Список торговых предприятий на сервере iiko (для выбора depotId)
+async function iikoDepartments(v) {
+  const key = (await (await iikoReq(v, `/resto/api/auth?login=${encodeURIComponent(v.login)}&pass=${v.passHash}`)).text()).trim();
+  try {
+    const xml = await (await iikoReq(v, `/resto/api/corporation/departments?key=${key}`)).text();
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const child = (n, tag) => [...n.children].find(c => c.tagName === tag)?.textContent || '';
+    return [...doc.getElementsByTagName('corporateItemDto')]
+      .map(n => ({ id: child(n, 'id'), name: child(n, 'name'), type: child(n, 'type') }))
+      .filter(d => d.id && (!d.type || d.type === 'DEPARTMENT'));
+  } finally {
+    http(iikoUrl(v, `/resto/api/logout?key=${key}`)).catch(() => {});
+  }
+}
+function deptListHTML() {
+  if (!S.depts) return '';
+  if (!S.depts.length) return '<div class="muted small">Торговых предприятий не найдено</div>';
+  return `<div class="muted small" style="margin-top:8px">Найдено точек: ${S.depts.length}</div>` +
+    S.depts.map(d => `<div class="list-item"><span>${esc(d.name)}<br><span class="muted small">${esc(d.id)}</span></span>
+      <button class="btn" data-act="deptPick" data-id="${esc(d.id)}" data-name="${esc(d.name)}">Выбрать</button></div>`).join('') +
+    (S.depts.length > 1 ? '<button class="btn full" data-act="deptAddAll">Добавить все как отдельные точки</button>' : '');
+}
+
+// Старт
+cacheCleanup();
+seed();
+seedPresets();
+if (!S.selected && S.venues.length) S.selected = S.venues[0].id;
+if (!RENDER[S.tab]) S.tab = 'summary';
+render();
+loadAll(false);
+// Автообновление: раз в минуту проверяем, не истёк ли кэш (15 мин)
+setInterval(() => { if (!document.hidden) loadAll(false); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAll(false); });
+</script>
+</body>
+</html>
